@@ -7,6 +7,7 @@ import {
 	Markdown,
 	type MarkdownTheme,
 	rewriteMarkdownLinkDestinations,
+	streamingMarkdownSource,
 } from "../components/markdown";
 import { Spacer } from "../components/spacer";
 import { Text } from "../components/text";
@@ -1250,9 +1251,11 @@ export class AssistantMessageComponent extends Container {
 					// non-blank line is still being written (thinking's prose fold
 					// may rewrite it) and must stay out of published bytes. A
 					// partial thinking line the fold may still drop does not count.
+					// The frozen prefix is in streamingMarkdownSource form, so
+					// offsets into the block use that form too.
 					const raw = md.getLastRenderStableText();
 					const frozen = raw.trim();
-					let past = item.lastText.slice(raw.length);
+					let past = streamingMarkdownSource(item.lastText).slice(raw.length);
 					if (item.blockType === "thinking") past = past.replace(UNSETTLED_THINKING_TAIL, "");
 					if (frozen.length > 0 && /\S/.test(past)) {
 						parts.push({ kind: item.blockType, text: frozen });
@@ -1260,8 +1263,9 @@ export class AssistantMessageComponent extends Container {
 					break;
 				}
 				// Closed child: only the streaming tail may mutate in place, so
-				// everything before it is final.
-				parts.push({ kind: item.blockType, text: item.lastText });
+				// everything before it is final. Same form as the frozen prefix it
+				// published while streaming, so the snapshot still extends.
+				parts.push({ kind: item.blockType, text: streamingMarkdownSource(item.lastText) });
 				itemIndex++;
 				continue;
 			}

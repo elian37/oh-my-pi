@@ -142,6 +142,34 @@ describe("AssistantMessageComponent streaming fast path", () => {
 		}
 	});
 
+	it("keeps retiring later blocks after a streamed block with a tab closes", () => {
+		// While streaming, a block publishes Markdown's settled prefix (tabs
+		// expanded); once the next block starts it publishes whole. Both must be
+		// the same bytes, or every later snapshot stops extending the published one.
+		const first = "Columns:\tname\tsize.\n\nSecond paragraph of the answer.\n\nThird paragraph.";
+		const second = "Now reasoning about the next step.\n\nAnother paragraph here.\n\nAnd a closing line.";
+		const component = new AssistantMessageComponent();
+		const counts: number[] = [];
+		const stream = (content: AssistantMessage["content"]) => {
+			component.updateContent(msg(content), { transient: true });
+			const rows = trimBlankEdges(component.render(W));
+			const stable = component.renderTranscriptStableRows(component.getTranscriptStableRows().length, W);
+			expect(rows.slice(0, stable.length)).toEqual([...stable]);
+			counts.push(stable.length);
+		};
+		for (let end = 1; end <= first.length; end++) stream([{ type: "text", text: first.slice(0, end) }]);
+		const beforeSecond = counts.at(-1)!;
+		expect(beforeSecond).toBeGreaterThan(0);
+		for (let end = 1; end <= second.length; end++) {
+			stream([
+				{ type: "text", text: first },
+				{ type: "thinking", thinking: second.slice(0, end) },
+			]);
+		}
+		// The closed first block and the settled head of the second both retire.
+		expect(counts.at(-1)!).toBeGreaterThan(beforeSecond + 2);
+	});
+
 	it("matches teardown output across a growing thinking + text stream", () => {
 		const reused = new AssistantMessageComponent();
 		const thinking = "Reasoning about the **problem** with `code` and a list:\n- a\n- b";
