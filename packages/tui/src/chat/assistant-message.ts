@@ -111,6 +111,14 @@ interface StableRenderInputs {
 	readonly color: ((text: string) => string) | undefined;
 }
 
+/**
+ * A partial last thinking line the prose fold may still drop: the start of a
+ * fence marker (`` ` ``, `~`) or of an empty `<!-- -->` sentinel. Once it turns
+ * into either, the fold's ellipsis lands back on the line above it
+ * (`formatThinkingForDisplay`), so that line is not yet settled.
+ */
+const UNSETTLED_THINKING_TAIL = /(?:^|\n)[^\S\n]*(?:`{1,2}|~{1,2}|<(?:!(?:-(?:-[^\S\n]*-{0,2})?)?)?)[^\S\n]*$/;
+
 function isSnapshotExtension(previous: readonly StablePart[], current: readonly StablePart[]): boolean {
 	if (previous.length > current.length) return false;
 	for (let index = 0; index < previous.length; index++) {
@@ -1240,10 +1248,13 @@ export class AssistantMessageComponent extends Container {
 					// Streaming child: publish Markdown's frozen prefix, and only
 					// once non-blank content exists past it — the block's last
 					// non-blank line is still being written (thinking's prose fold
-					// may rewrite it) and must stay out of published bytes.
+					// may rewrite it) and must stay out of published bytes. A
+					// partial thinking line the fold may still drop does not count.
 					const raw = md.getLastRenderStableText();
 					const frozen = raw.trim();
-					if (frozen.length > 0 && /\S/.test(item.lastText.slice(raw.length))) {
+					let past = item.lastText.slice(raw.length);
+					if (item.blockType === "thinking") past = past.replace(UNSETTLED_THINKING_TAIL, "");
+					if (frozen.length > 0 && /\S/.test(past)) {
 						parts.push({ kind: item.blockType, text: frozen });
 					}
 					break;
